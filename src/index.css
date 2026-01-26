@@ -1,0 +1,129 @@
+/**
+ * Global Styles & CSS Variables
+ *
+ * This file contains:
+ * - CSS reset/normalization
+ * - CSS custom properties (variables) for consistent theming
+ * - Base styles for the app layout
+ *
+ * CSS Variables (--variable-name):
+ * - Can be reused throughout the app
+ * - Easy to update theme colors in one place
+ * - Better than SCSS variables because they work at runtime
+ */
+
+/* CSS Reset - ensures consistent styling across browsers */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* CSS Variables - our color palette and spacing system */
+:root {
+  /* Primary colors */
+  --color-primary: #10b981;      /* Green (emerald-500) - positive actions */
+  --color-primary-dark: #059669; /* Darker green for hover states */
+  --color-primary-light: #d1fae5; /* Light green for backgrounds */
+
+  /* Danger/alert colors (for flare-ups) */
+  --color-danger: #ef4444;       /* Red (red-500) */
+  --color-danger-dark: #dc2626;  /* Darker red for hover */
+  --color-danger-light: #fee2e2; /* Light red for backgrounds */
+
+  /* Severity colors */
+  --color-severity-mild: #fbbf24;     /* Amber */
+  --color-severity-moderate: #fb923c; /* Orange */
+  --color-severity-severe: #ef4444;   /* Red */
+
+  /* Neutral colors (grays) */
+  --color-bg: #ffffff;           /* Background */
+  --color-bg-secondary: #f9fafb; /* Secondary background (gray-50) */
+  --color-text: #1f2937;         /* Primary text (gray-800) */
+  --color-text-secondary: #6b7280; /* Secondary text (gray-500) */
+  --color-border: #e5e7eb;       /* Borders (gray-200) */
+
+  /* Spacing system (based on 4px grid) */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Base typography */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  line-height: 1.5;
+}
+
+/* Remove default button styles */
+button {
+  font-family: inherit;
+  font-size: 100%;
+  line-height: inherit;
+  color: inherit;
+}
+
+/* App container - ensures full viewport height */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Main content area - grows to fill available space */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  /* Add padding bottom to account for fixed bottom navigation */
+  padding-bottom: 80px;
+}
+
+/* Utility classes */
+.text-primary {
+  color: var(--color-primary);
+}
+
+.text-danger {
+  color: var(--color-danger);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+
+/* Mobile-first responsive breakpoints */
+@media (min-width: 640px) {
+  /* Tablet and larger - adjust layout if needed */
+}
+
+@media (min-width: 1024px) {
+  /* Desktop - center content and limit width */
+  .main-content {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+}
