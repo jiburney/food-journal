@@ -1,0 +1,16 @@
+# Security and performance headers for all routes
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: microphone=(self), geolocation=(), camera=()
+
+# PWA manifest with correct content type
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+
+# Service worker with proper caching headers
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+  Service-Worker-Allowed: /
