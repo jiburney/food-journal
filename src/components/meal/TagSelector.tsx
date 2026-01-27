@@ -6,12 +6,14 @@
  * Design pattern:
  * - Predefined tags as clickable chips (toggle on/off)
  * - Active tags get green background for clear visual feedback
- * - Custom tag input for one-off additions (e.g., "custom: aioli")
+ * - Custom tag input with auto-suggestions from previously used custom tags
  * - Tags prefixed with "custom: " to distinguish from predefined
+ * - Collapsible tag grid to keep buttons above the fold
  *
  * UX goals:
  * - Fast selection (single tap to toggle)
  * - Clear visual distinction between selected/unselected
+ * - Auto-suggest previously used custom tags
  * - Easy to add restaurant-specific or uncommon foods
  *
  * Why tags matter for Alpha Gal:
@@ -21,8 +23,9 @@
  * - Need to track these consistently for pattern analysis
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PREDEFINED_TAGS } from '../../types'
+import { getSettings, updateSettings } from '../../services/db'
 
 interface TagSelectorProps {
   /** Currently selected tags */
@@ -34,6 +37,32 @@ interface TagSelectorProps {
 export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorProps) {
   // Local state for custom tag input
   const [customTagInput, setCustomTagInput] = useState('')
+  // State for showing all tags or just first 2 rows
+  const [showAllTags, setShowAllTags] = useState(false)
+  // State for saved custom tags (from IndexedDB)
+  const [savedCustomTags, setSavedCustomTags] = useState<string[]>([])
+
+  // Load saved custom tags from IndexedDB when component mounts
+  useEffect(() => {
+    loadSavedCustomTags()
+  }, [])
+
+  /**
+   * Load custom tags that user has used before
+   * Stored in settings so they can be suggested again
+   */
+  const loadSavedCustomTags = async () => {
+    try {
+      const settings = await getSettings()
+      setSavedCustomTags(settings.customTags || [])
+    } catch (error) {
+      console.error('Failed to load saved custom tags:', error)
+    }
+  }
+
+  // Number of tags to show initially (approximately 2 rows on mobile)
+  const INITIAL_TAG_COUNT = 12
+  const visibleTags = showAllTags ? PREDEFINED_TAGS : PREDEFINED_TAGS.slice(0, INITIAL_TAG_COUNT)
 
   /**
    * Toggle a predefined tag on/off
@@ -51,9 +80,10 @@ export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorP
   /**
    * Add a custom tag
    * Validates and prefixes with "custom: " to distinguish from predefined tags
+   * Also saves to IndexedDB for future auto-suggestions
    */
-  const addCustomTag = () => {
-    const trimmed = customTagInput.trim()
+  const addCustomTag = async () => {
+    const trimmed = customTagInput.trim().toLowerCase()
 
     // Validation
     if (!trimmed) return // Empty input
@@ -76,6 +106,21 @@ export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorP
     // Add the custom tag
     onTagsChange([...selectedTags, customTag])
     setCustomTagInput('')
+
+    // Save this custom tag to settings for future suggestions
+    try {
+      const settings = await getSettings()
+      const existingCustomTags = settings.customTags || []
+
+      // Only add if not already in saved list
+      if (!existingCustomTags.includes(trimmed)) {
+        const updatedCustomTags = [...existingCustomTags, trimmed]
+        await updateSettings({ customTags: updatedCustomTags })
+        setSavedCustomTags(updatedCustomTags)
+      }
+    } catch (error) {
+      console.error('Failed to save custom tag:', error)
+    }
   }
 
   /**
@@ -105,9 +150,9 @@ export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorP
         Select common ingredients or add custom tags
       </p>
 
-      {/* Predefined tags */}
+      {/* Predefined tags - collapsible */}
       <div className="tag-grid">
-        {PREDEFINED_TAGS.map((tag) => {
+        {visibleTags.map((tag) => {
           const isSelected = selectedTags.includes(tag)
           return (
             <button
@@ -121,6 +166,17 @@ export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorP
           )
         })}
       </div>
+
+      {/* Show more/less button */}
+      {PREDEFINED_TAGS.length > INITIAL_TAG_COUNT && (
+        <button
+          type="button"
+          className="show-more-button"
+          onClick={() => setShowAllTags(!showAllTags)}
+        >
+          {showAllTags ? '▲ Show less' : `▼ Show ${PREDEFINED_TAGS.length - INITIAL_TAG_COUNT} more`}
+        </button>
+      )}
 
       {/* Selected custom tags */}
       {customTags.length > 0 && (
@@ -144,16 +200,22 @@ export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorP
         </div>
       )}
 
-      {/* Custom tag input */}
+      {/* Custom tag input with datalist for auto-suggestions */}
       <div className="custom-tag-input">
         <input
           type="text"
+          list="saved-custom-tags"
           value={customTagInput}
           onChange={(e) => setCustomTagInput(e.target.value)}
           onKeyDown={handleCustomTagKeyDown}
           placeholder="Add custom tag (e.g., aioli, sushi)"
           className="tag-input"
         />
+        <datalist id="saved-custom-tags">
+          {savedCustomTags.map((tag) => (
+            <option key={tag} value={tag} />
+          ))}
+        </datalist>
         <button
           type="button"
           onClick={addCustomTag}
@@ -216,6 +278,25 @@ export default function TagSelector({ selectedTags, onTagsChange }: TagSelectorP
 
         .tag-chip:active {
           transform: scale(0.95);
+        }
+
+        .show-more-button {
+          width: 100%;
+          padding: var(--spacing-xs) var(--spacing-sm);
+          background: none;
+          border: 1px dashed var(--color-border);
+          border-radius: var(--radius-md);
+          color: var(--color-text-secondary);
+          font-size: 12px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          margin-bottom: var(--spacing-md);
+        }
+
+        .show-more-button:hover {
+          border-color: var(--color-primary);
+          color: var(--color-primary);
+          background-color: var(--color-primary-light);
         }
 
         .custom-tags {

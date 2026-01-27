@@ -95,6 +95,9 @@ export interface Settings {
 
   /** Theme preference (optional for Phase 1) */
   theme?: 'light' | 'dark' | 'auto';
+
+  /** Custom tags that user has previously used (for auto-suggestions) */
+  customTags?: string[];
 }
 
 /**

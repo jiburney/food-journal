@@ -255,7 +255,26 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
             </div>
           </div>
 
-          {/* Tag selector */}
+          {/* Action buttons - moved here to stay above the fold */}
+          <div className="form-actions">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="cancel-button"
+              disabled={isSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="save-button"
+              disabled={!description.trim() || isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save Meal'}
+            </button>
+          </div>
+
+          {/* Tag selector - moved below buttons, optional section */}
           <TagSelector selectedTags={tags} onTagsChange={setTags} />
 
           {/* Optional notes field */}
@@ -284,25 +303,6 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
               />
             </div>
           )}
-
-          {/* Action buttons */}
-          <div className="form-actions">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="cancel-button"
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="save-button"
-              disabled={!description.trim() || isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save Meal'}
-            </button>
-          </div>
         </form>
       </div>
 
@@ -467,7 +467,7 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
         .form-actions {
           display: flex;
           gap: var(--spacing-md);
-          margin-top: var(--spacing-xl);
+          margin-bottom: var(--spacing-xl);
         }
 
         .cancel-button,
