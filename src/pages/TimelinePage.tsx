@@ -12,14 +12,17 @@
  */
 
 import { useState, useEffect } from 'react'
-import { getMeals, deleteMeal } from '../services/db'
-import type { Meal } from '../types'
+import { getMeals, deleteMeal, getFlareups, deleteFlareup } from '../services/db'
+import type { Meal, Flareup } from '../types'
 import { format, isToday, isYesterday } from 'date-fns'
+import FlareupLogger from '../components/flareup/FlareupLogger'
 
 export default function TimelinePage() {
-  // State for meals loaded from IndexedDB
+  // State for meals and flare-ups loaded from IndexedDB
   const [meals, setMeals] = useState<Meal[]>([])
+  const [flareups, setFlareups] = useState<Flareup[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showFlareupLogger, setShowFlareupLogger] = useState(false)
 
   // Load meals when component mounts
   // useEffect runs after the component renders
@@ -28,15 +31,19 @@ export default function TimelinePage() {
   }, []) // Empty dependency array = run once on mount
 
   /**
-   * Load all meals from IndexedDB
-   * getMeals() returns them sorted newest first
+   * Load all meals and flare-ups from IndexedDB
+   * Both are sorted newest first
    */
   const loadMeals = async () => {
     try {
-      const loadedMeals = await getMeals()
+      const [loadedMeals, loadedFlareups] = await Promise.all([
+        getMeals(),
+        getFlareups()
+      ])
       setMeals(loadedMeals)
+      setFlareups(loadedFlareups)
     } catch (error) {
-      console.error('Failed to load meals:', error)
+      console.error('Failed to load data:', error)
     } finally {
       setIsLoading(false)
     }
@@ -46,7 +53,7 @@ export default function TimelinePage() {
    * Delete a meal after user confirmation
    * Updates both IndexedDB and local state
    */
-  const handleDelete = async (id: string) => {
+  const handleDeleteMeal = async (id: string) => {
     if (!confirm('Delete this meal?')) return
 
     try {
@@ -57,6 +64,30 @@ export default function TimelinePage() {
       console.error('Failed to delete meal:', error)
       alert('Failed to delete meal. Please try again.')
     }
+  }
+
+  /**
+   * Delete a flare-up after user confirmation
+   * Updates both IndexedDB and local state
+   */
+  const handleDeleteFlareup = async (id: string) => {
+    if (!confirm('Delete this flare-up?')) return
+
+    try {
+      await deleteFlareup(id)
+      // Update local state to remove the deleted flare-up
+      setFlareups(prev => prev.filter(flareup => flareup.id !== id))
+    } catch (error) {
+      console.error('Failed to delete flare-up:', error)
+      alert('Failed to delete flare-up. Please try again.')
+    }
+  }
+
+  /**
+   * After saving a flare-up, reload the data to show it in timeline
+   */
+  const handleFlareupSaved = () => {
+    loadMeals() // Reloads both meals and flareups
   }
 
   /**
@@ -79,17 +110,38 @@ export default function TimelinePage() {
   }
 
   /**
-   * Group meals by date for timeline display
-   * Creates an object like: { "Today": [meal1, meal2], "Yesterday": [...] }
+   * Combine meals and flare-ups into a single timeline
+   * Both are sorted newest first, so we merge them by timestamp
    */
-  const groupedMeals = meals.reduce((groups, meal) => {
-    const dateKey = formatDate(meal.timestamp)
+  type TimelineItem = (Meal & { itemType: 'meal' }) | (Flareup & { itemType: 'flareup' })
+
+  const timelineItems: TimelineItem[] = [
+    ...meals.map(m => ({ ...m, itemType: 'meal' as const })),
+    ...flareups.map(f => ({ ...f, itemType: 'flareup' as const }))
+  ].sort((a, b) => b.timestamp - a.timestamp) // Sort newest first
+
+  /**
+   * Group timeline items by date
+   * Creates an object like: { "Today": [meal1, flareup1, meal2], "Yesterday": [...] }
+   */
+  const groupedItems = timelineItems.reduce((groups, item) => {
+    const dateKey = formatDate(item.timestamp)
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }
-    groups[dateKey].push(meal)
+    groups[dateKey].push(item)
     return groups
-  }, {} as Record<string, Meal[]>)
+  }, {} as Record<string, TimelineItem[]>)
+
+  /**
+   * Get associated meals for a flare-up
+   * Used to display which meals might have caused the flare-up
+   */
+  const getAssociatedMeals = (flareup: Flareup): Meal[] => {
+    return flareup.associatedMealIds
+      .map(id => meals.find(m => m.id === id))
+      .filter(Boolean) as Meal[]
+  }
 
   // Show loading state while fetching from IndexedDB
   if (isLoading) {
@@ -108,10 +160,16 @@ export default function TimelinePage() {
     <div className="page-container">
       <header className="page-header">
         <h1>Timeline</h1>
+        <button
+          className="log-flareup-button"
+          onClick={() => setShowFlareupLogger(true)}
+        >
+          🔴 Log Flare-up
+        </button>
       </header>
 
       <div className="page-content">
-        {meals.length === 0 ? (
+        {timelineItems.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📋</div>
             <h2>No meals logged yet</h2>
@@ -119,44 +177,107 @@ export default function TimelinePage() {
           </div>
         ) : (
           <div className="timeline">
-            {Object.entries(groupedMeals).map(([date, dateMeals]) => (
+            {Object.entries(groupedItems).map(([date, dateItems]) => (
               <div key={date} className="date-group">
                 <h2 className="date-header">{date}</h2>
-                <div className="meals-list">
-                  {dateMeals.map((meal) => (
-                    <div key={meal.id} className="meal-card">
-                      <div className="meal-header">
-                        <span className="meal-time">{formatTime(meal.timestamp)}</span>
-                        {meal.mealType && (
-                          <span className="meal-type-badge">{meal.mealType}</span>
-                        )}
-                      </div>
-                      <p className="meal-description">{meal.description}</p>
-                      {meal.tags && meal.tags.length > 0 && (
-                        <div className="meal-tags">
-                          {meal.tags.map((tag) => (
-                            <span key={tag} className="tag">{tag}</span>
-                          ))}
+                <div className="timeline-list">
+                  {dateItems.map((item) => {
+                    if (item.itemType === 'flareup') {
+                      // Render flare-up card
+                      const associatedMeals = getAssociatedMeals(item)
+                      return (
+                        <div key={item.id} className={`flareup-card severity-${item.severity}`}>
+                          <div className="flareup-header">
+                            <span className="flareup-time">🔴 {formatTime(item.timestamp)}</span>
+                            <span className={`severity-badge severity-${item.severity}`}>
+                              {item.severity}
+                            </span>
+                          </div>
+                          <p className="flareup-description">{item.description}</p>
+                          {item.notes && (
+                            <p className="flareup-notes">{item.notes}</p>
+                          )}
+
+                          {/* Associated meals */}
+                          {associatedMeals.length > 0 && (
+                            <div className="associated-meals">
+                              <p className="associated-meals-label">
+                                Associated meals ({associatedMeals.length}):
+                              </p>
+                              <div className="associated-meals-list">
+                                {associatedMeals.slice(0, 3).map((meal) => (
+                                  <div key={meal.id} className="associated-meal-item">
+                                    <span className="associated-meal-time">
+                                      {formatTime(meal.timestamp)}
+                                    </span>
+                                    <span className="associated-meal-desc">
+                                      {meal.description}
+                                    </span>
+                                  </div>
+                                ))}
+                                {associatedMeals.length > 3 && (
+                                  <p className="more-meals">
+                                    + {associatedMeals.length - 3} more meal{associatedMeals.length > 4 ? 's' : ''}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          <button
+                            className="delete-button"
+                            onClick={() => handleDeleteFlareup(item.id)}
+                            aria-label="Delete flare-up"
+                          >
+                            🗑️
+                          </button>
                         </div>
-                      )}
-                      {meal.notes && (
-                        <p className="meal-notes">{meal.notes}</p>
-                      )}
-                      <button
-                        className="delete-button"
-                        onClick={() => handleDelete(meal.id)}
-                        aria-label="Delete meal"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
+                      )
+                    } else {
+                      // Render meal card
+                      return (
+                        <div key={item.id} className="meal-card">
+                          <div className="meal-header">
+                            <span className="meal-time">{formatTime(item.timestamp)}</span>
+                            {item.mealType && (
+                              <span className="meal-type-badge">{item.mealType}</span>
+                            )}
+                          </div>
+                          <p className="meal-description">{item.description}</p>
+                          {item.tags && item.tags.length > 0 && (
+                            <div className="meal-tags">
+                              {item.tags.map((tag) => (
+                                <span key={tag} className="tag">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                          {item.notes && (
+                            <p className="meal-notes">{item.notes}</p>
+                          )}
+                          <button
+                            className="delete-button"
+                            onClick={() => handleDeleteMeal(item.id)}
+                            aria-label="Delete meal"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )
+                    }
+                  })}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Flare-up logger modal */}
+      <FlareupLogger
+        isOpen={showFlareupLogger}
+        onClose={() => setShowFlareupLogger(false)}
+        onSaved={handleFlareupSaved}
+      />
 
       <style>{`
         .page-container {
@@ -171,6 +292,10 @@ export default function TimelinePage() {
           position: sticky;
           top: 0;
           z-index: 100;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--spacing-md);
         }
 
         .page-header h1 {
@@ -178,6 +303,29 @@ export default function TimelinePage() {
           font-weight: 600;
           color: var(--color-text);
           margin: 0;
+        }
+
+        .log-flareup-button {
+          padding: var(--spacing-sm) var(--spacing-md);
+          background-color: var(--color-danger);
+          color: white;
+          border: none;
+          border-radius: var(--radius-md);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all 0.2s ease;
+        }
+
+        .log-flareup-button:hover {
+          background-color: var(--color-danger-dark);
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .log-flareup-button:active {
+          transform: translateY(0);
         }
 
         .page-content {
@@ -238,7 +386,7 @@ export default function TimelinePage() {
           border-bottom: 2px solid var(--color-border);
         }
 
-        .meals-list {
+        .timeline-list {
           display: flex;
           flex-direction: column;
           gap: var(--spacing-md);
@@ -335,6 +483,141 @@ export default function TimelinePage() {
 
         .delete-button:active {
           transform: scale(0.95);
+        }
+
+        /* Flare-up card styles */
+        .flareup-card {
+          position: relative;
+          background: var(--color-bg);
+          border: 2px solid var(--color-danger);
+          border-left: 6px solid var(--color-danger);
+          border-radius: var(--radius-md);
+          padding: var(--spacing-md);
+          box-shadow: var(--shadow-sm);
+          transition: box-shadow 0.2s ease;
+        }
+
+        .flareup-card:hover {
+          box-shadow: var(--shadow-md);
+        }
+
+        /* Severity-specific border colors */
+        .flareup-card.severity-mild {
+          border-color: var(--color-severity-mild);
+          border-left-color: var(--color-severity-mild);
+        }
+
+        .flareup-card.severity-moderate {
+          border-color: var(--color-severity-moderate);
+          border-left-color: var(--color-severity-moderate);
+        }
+
+        .flareup-card.severity-severe {
+          border-color: var(--color-severity-severe);
+          border-left-color: var(--color-severity-severe);
+        }
+
+        .flareup-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: var(--spacing-sm);
+        }
+
+        .flareup-time {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--color-danger);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .severity-badge {
+          padding: 2px 8px;
+          border-radius: var(--radius-sm);
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: capitalize;
+          color: white;
+        }
+
+        .severity-badge.severity-mild {
+          background-color: var(--color-severity-mild);
+        }
+
+        .severity-badge.severity-moderate {
+          background-color: var(--color-severity-moderate);
+        }
+
+        .severity-badge.severity-severe {
+          background-color: var(--color-severity-severe);
+        }
+
+        .flareup-description {
+          font-size: 15px;
+          color: var(--color-text);
+          margin: 0 0 var(--spacing-sm) 0;
+          line-height: 1.5;
+          font-weight: 500;
+        }
+
+        .flareup-notes {
+          font-size: 13px;
+          color: var(--color-text-secondary);
+          font-style: italic;
+          margin: var(--spacing-sm) 0;
+          padding-top: var(--spacing-sm);
+          border-top: 1px dashed var(--color-border);
+        }
+
+        /* Associated meals section */
+        .associated-meals {
+          margin-top: var(--spacing-md);
+          padding: var(--spacing-sm);
+          background-color: var(--color-bg-secondary);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--color-border);
+        }
+
+        .associated-meals-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--color-text-secondary);
+          margin: 0 0 var(--spacing-xs) 0;
+        }
+
+        .associated-meals-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .associated-meal-item {
+          display: flex;
+          gap: var(--spacing-sm);
+          font-size: 12px;
+        }
+
+        .associated-meal-time {
+          color: var(--color-text-secondary);
+          font-weight: 500;
+          white-space: nowrap;
+          min-width: 70px;
+        }
+
+        .associated-meal-desc {
+          color: var(--color-text);
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .more-meals {
+          font-size: 11px;
+          color: var(--color-text-secondary);
+          margin: 4px 0 0 0;
+          font-style: italic;
         }
       `}</style>
     </div>
