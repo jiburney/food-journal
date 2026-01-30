@@ -226,6 +226,20 @@ export async function getMealsBeforeTimestamp(
 }
 
 /**
+ * Update an existing meal in the database
+ *
+ * Uses IndexedDB put() to update the meal while preserving its ID.
+ * This is used when editing meals retroactively.
+ *
+ * @param meal - Complete meal object including the ID to update
+ * @returns Promise that resolves when update is complete
+ */
+export async function updateMeal(meal: Meal): Promise<void> {
+  const db = await initDB()
+  await db.put(STORES.MEALS, meal)
+}
+
+/**
  * Delete a meal from the database
  *
  * Note: This doesn't remove the meal from flareup associations.

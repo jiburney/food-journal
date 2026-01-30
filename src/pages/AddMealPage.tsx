@@ -46,6 +46,16 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
   const [tags, setTags] = useState<string[]>([])
   const [showNotes, setShowNotes] = useState(false)
 
+  // Date/time state
+  const [mealDate, setMealDate] = useState(() => {
+    const today = new Date()
+    return today.toISOString().split('T')[0] // Format: YYYY-MM-DD
+  })
+  const [mealTime, setMealTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+
   // UI state
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -57,6 +67,9 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
   // Check if voice is supported
   const voiceSupported = isSpeechRecognitionSupported()
 
+  // Get today's date in YYYY-MM-DD format for comparison
+  const todayString = new Date().toISOString().split('T')[0]
+
   /**
    * Autofocus the description field when page loads
    * This speeds up data entry - user can immediately start typing
@@ -64,6 +77,34 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
   useEffect(() => {
     descriptionRef.current?.focus()
   }, [])
+
+  /**
+   * Auto-fill time based on meal type when date is today
+   * Only applies in add mode (not edit mode)
+   */
+  const handleMealTypeChange = (type: MealType) => {
+    setMealType(type)
+
+    // Only auto-fill if the selected date is today
+    if (mealDate === todayString) {
+      switch (type) {
+        case 'breakfast':
+          setMealTime('08:00')
+          break
+        case 'lunch':
+          setMealTime('12:00')
+          break
+        case 'dinner':
+          setMealTime('18:00')
+          break
+        case 'snack':
+          // Use current time for snacks
+          const now = new Date()
+          setMealTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+          break
+      }
+    }
+  }
 
   /**
    * Save the meal to IndexedDB
@@ -78,10 +119,13 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
     setIsSaving(true)
 
     try {
+      // Combine date and time to create timestamp
+      const timestamp = new Date(`${mealDate}T${mealTime}`).getTime()
+
       // Save to IndexedDB
       await addMeal({
-        timestamp: Date.now(),
-        type: 'text', // Will be 'voice' when using voice input (Phase 4)
+        timestamp,
+        type: inputMode === 'voice' ? 'voice' : 'text',
         mealType,
         description: description.trim(),
         notes: notes.trim() || undefined,
@@ -100,11 +144,15 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
         setShowNotes(false)
         setSaveSuccess(false)
 
+        // Reset date/time to current
+        const today = new Date()
+        setMealDate(today.toISOString().split('T')[0])
+        setMealTime(`${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`)
+
         // Focus back on description for quick consecutive entries
         descriptionRef.current?.focus()
 
         // Navigate to timeline if callback provided
-        // (Will be added when we integrate with App.tsx navigation)
         onNavigateToTimeline?.()
       }, 500)
     } catch (error) {
@@ -238,6 +286,34 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
             )}
           </div>
 
+          {/* Date and Time pickers */}
+          <div className="form-group">
+            <label className="form-label">Date & Time</label>
+            <div className="datetime-grid">
+              <div className="date-field">
+                <label htmlFor="meal-date" className="field-sublabel">Date</label>
+                <input
+                  type="date"
+                  id="meal-date"
+                  value={mealDate}
+                  max={todayString}
+                  onChange={(e) => setMealDate(e.target.value)}
+                  className="datetime-input"
+                />
+              </div>
+              <div className="time-field">
+                <label htmlFor="meal-time" className="field-sublabel">Time</label>
+                <input
+                  type="time"
+                  id="meal-time"
+                  value={mealTime}
+                  onChange={(e) => setMealTime(e.target.value)}
+                  className="datetime-input"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Meal type selector */}
           <div className="form-group">
             <label className="form-label">Meal Type (optional)</label>
@@ -247,7 +323,7 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
                   key={type}
                   type="button"
                   className={`meal-type-button ${mealType === type ? 'selected' : ''}`}
-                  onClick={() => setMealType(type)}
+                  onClick={() => handleMealTypeChange(type)}
                 >
                   {type.charAt(0).toUpperCase() + type.slice(1)}
                 </button>
@@ -410,6 +486,40 @@ export default function AddMealPage({ onNavigateToTimeline }: AddMealPageProps) 
           .field-hint {
             display: block; /* Show on tablet+ */
           }
+        }
+
+        .datetime-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--spacing-md);
+        }
+
+        .date-field,
+        .time-field {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .field-sublabel {
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--color-text-secondary);
+          margin-bottom: 4px;
+        }
+
+        .datetime-input {
+          padding: var(--spacing-sm) var(--spacing-md);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          font-size: 15px;
+          font-family: inherit;
+          color: var(--color-text);
+        }
+
+        .datetime-input:focus {
+          outline: none;
+          border-color: var(--color-primary);
+          box-shadow: 0 0 0 3px var(--color-primary-light);
         }
 
         .meal-type-grid {

@@ -16,6 +16,7 @@ import { getMeals, deleteMeal, getFlareups, deleteFlareup } from '../services/db
 import type { Meal, Flareup } from '../types'
 import { format, isToday, isYesterday } from 'date-fns'
 import FlareupLogger from '../components/flareup/FlareupLogger'
+import MealEditor from '../components/meal/MealEditor'
 
 export default function TimelinePage() {
   // State for meals and flare-ups loaded from IndexedDB
@@ -23,6 +24,10 @@ export default function TimelinePage() {
   const [flareups, setFlareups] = useState<Flareup[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showFlareupLogger, setShowFlareupLogger] = useState(false)
+
+  // State for meal editor modal
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null)
+  const [showMealEditor, setShowMealEditor] = useState(false)
 
   // Load meals when component mounts
   // useEffect runs after the component renders
@@ -88,6 +93,23 @@ export default function TimelinePage() {
    */
   const handleFlareupSaved = () => {
     loadMeals() // Reloads both meals and flareups
+  }
+
+  /**
+   * Open the meal editor with the selected meal
+   */
+  const handleEditMeal = (meal: Meal) => {
+    setEditingMeal(meal)
+    setShowMealEditor(true)
+  }
+
+  /**
+   * After saving/deleting a meal, reload the data and close editor
+   */
+  const handleMealSaved = () => {
+    loadMeals() // Reloads both meals and flareups
+    setShowMealEditor(false)
+    setEditingMeal(null)
   }
 
   /**
@@ -254,13 +276,22 @@ export default function TimelinePage() {
                           {item.notes && (
                             <p className="meal-notes">{item.notes}</p>
                           )}
-                          <button
-                            className="delete-button"
-                            onClick={() => handleDeleteMeal(item.id)}
-                            aria-label="Delete meal"
-                          >
-                            🗑️
-                          </button>
+                          <div className="meal-actions">
+                            <button
+                              className="edit-button"
+                              onClick={() => handleEditMeal(item)}
+                              aria-label="Edit meal"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className="delete-button"
+                              onClick={() => handleDeleteMeal(item.id)}
+                              aria-label="Delete meal"
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </div>
                       )
                     }
@@ -277,6 +308,17 @@ export default function TimelinePage() {
         isOpen={showFlareupLogger}
         onClose={() => setShowFlareupLogger(false)}
         onSaved={handleFlareupSaved}
+      />
+
+      {/* Meal editor modal */}
+      <MealEditor
+        meal={editingMeal}
+        isOpen={showMealEditor}
+        onClose={() => {
+          setShowMealEditor(false)
+          setEditingMeal(null)
+        }}
+        onSaved={handleMealSaved}
       />
 
       <style>{`
@@ -463,10 +505,16 @@ export default function TimelinePage() {
           border-top: 1px dashed var(--color-border);
         }
 
-        .delete-button {
+        .meal-actions {
           position: absolute;
           top: var(--spacing-sm);
           right: var(--spacing-sm);
+          display: flex;
+          gap: var(--spacing-xs);
+        }
+
+        .edit-button,
+        .delete-button {
           background: none;
           border: none;
           cursor: pointer;
@@ -476,13 +524,21 @@ export default function TimelinePage() {
           transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
+        .edit-button:hover,
         .delete-button:hover {
           opacity: 1;
           transform: scale(1.1);
         }
 
+        .edit-button:active,
         .delete-button:active {
           transform: scale(0.95);
+        }
+
+        .flareup-card .delete-button {
+          position: absolute;
+          top: var(--spacing-sm);
+          right: var(--spacing-sm);
         }
 
         /* Flare-up card styles */
